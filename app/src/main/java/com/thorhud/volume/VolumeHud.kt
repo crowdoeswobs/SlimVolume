@@ -21,12 +21,14 @@ import android.view.animation.DecelerateInterpolator
 import android.view.animation.LinearInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.FrameLayout
+import kotlin.math.abs
 
 /** Owns the overlay window: slide in, bump on each step, slide out when idle. */
 class VolumeHud(private val service: VolumeHudService, private val audio: AudioManager) {
 
     private companion object {
         const val NUDGE_DP = 5f       // how far a press pushes the bar toward the screen centre
+        const val RUBBER_MAX = 0.12f  // most the bar stretches when you pull past an end (12%)
         const val TOUCH_GROW_DP = 3f  // iOS mode: extra width while a finger is on the bar
         const val NUDGE_OUT_MS = 70L  // push-out time; a tap always gets the full push
     }
@@ -395,7 +397,16 @@ class VolumeHud(private val service: VolumeHudService, private val audio: AudioM
 
     // ---------- touch ----------
 
-    /** Drag on (or near) the bar to set volume directly, like iOS. */
+    // Relative drag state (iPhone-style: the fill moves by how far the finger moves,
+    // it never jumps to where you touched).
+    private var dragStartPos = 0f
+    private var dragStartLevel = 0f
+    private var dragEdge = 0 // -1 at bottom, 1 at top, 0 in between
+
+    /** Finger position along the bar's axis, increasing toward "louder". */
+    private fun axisPos(e: MotionEvent) = if (cfg.vertical) -e.y else e.x
+
+    /** Drag anywhere on (or near) the bar to slide the volume, like iOS. */
     @SuppressLint("ClickableViewAccessibility")
     private fun setupTouch() {
         root!!.setOnTouchListener { _, e ->
@@ -406,29 +417,28 @@ class VolumeHud(private val service: VolumeHudService, private val audio: AudioM
                     if (!visible) return@setOnTouchListener false
                     dragging = true
                     handler.removeCallbacks(hideRunnable)
-                    centerPivot(p)
-                    if (cfg.iosMode) {
-                        // iOS mode: whichever width it's at (slim or wide), grow just TOUCH_GROW_DP while held.
-                        touchGrew = false
-                        val r = if (wide) wideRect else slimRect
-                        val t = (if (cfg.vertical) r.width() else r.height()).toFloat()
-                        val grow = if (t > 0) (t + TOUCH_GROW_DP * dp) / t else 1f
-                        p.animate().scaleTL(grow, 1.03f).setDuration(150)
-                            .setInterpolator(DecelerateInterpolator()).start()
-                    } else {
-                        p.animate().scaleTL(1.6f, 1.03f).setDuration(150)
-                            .setInterpolator(DecelerateInterpolator()).start()
-                    }
-                    setFromTouch(e.x, e.y, l)
+                    levelAnim?.cancel()
+                    dragStartPos = axisPos(e)
+                    dragStartLevel = p.level
+                    dragEdge = edgeOf(p.level) // already at an end: no tick until it leaves and comes back
+                    touchGrew = false
+                    // Grow only across the bar (thickness); the length axis is used for the rubber-band.
+                    val t = (if (cfg.vertical) p.layoutParams.width else p.layoutParams.height).toFloat()
+                    val grow = if (cfg.iosMode) {
+                        if (t > 0) (t + TOUCH_GROW_DP * dp) / t else 1f
+                    } else 1.6f
+                    p.pivotX = p.layoutParams.width / 2f
+                    p.pivotY = p.layoutParams.height / 2f
+                    val anim = p.animate().setDuration(150).setInterpolator(DecelerateInterpolator())
+                    (if (cfg.vertical) anim.scaleX(grow) else anim.scaleY(grow)).start()
                 }
-                MotionEvent.ACTION_MOVE -> if (dragging) setFromTouch(e.x, e.y, l)
+                MotionEvent.ACTION_MOVE -> if (dragging) dragTo(axisPos(e), l, p)
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (dragging) {
                         dragging = false
-                        if (cfg.iosMode && touchGrew) { wide = false; animatePillRect(slimRect) }
-                        touchGrew = false
-                        p.animate().scaleTL(1f, 1f).setDuration(260)
-                            .setInterpolator(OvershootInterpolator(2f)).start()
+                        p.animate().scaleX(1f).scaleY(1f).setDuration(300)
+                            .setInterpolator(OvershootInterpolator(2f))
+                            .withEndAction { p.resetPivot() }.start()
                         scheduleHide()
                     }
                 }
@@ -437,22 +447,35 @@ class VolumeHud(private val service: VolumeHudService, private val audio: AudioM
         }
     }
 
-    private fun setFromTouch(x: Float, y: Float, l: HudLayout) {
-        // Touch coords are window-relative; convert to the bar's own axis.
-        val left = (l.pill.left - l.window.left).toFloat()
-        val top = (l.pill.top - l.window.top).toFloat()
-        val frac = if (cfg.vertical) 1f - (y - top) / l.pill.height()
-        else (x - left) / l.pill.width()
-        val f = frac.coerceIn(0f, 1f)
+    private fun edgeOf(f: Float) = when { f >= 1f -> 1; f <= 0f -> -1; else -> 0 }
+
+    private fun dragTo(pos: Float, l: HudLayout, p: PillView) {
+        val len = (if (cfg.vertical) l.pill.height() else l.pill.width()).toFloat()
+        if (len <= 0f) return
+        val raw = dragStartLevel + (pos - dragStartPos) / len
+        val f = raw.coerceIn(0f, 1f)
+
         val stream = service.activeStream()
         val max = audio.getStreamMaxVolume(stream)
         val vol = Math.round(f * max)
-        if (vol != audio.getStreamVolume(stream)) {
-            audio.setStreamVolume(stream, vol, 0)
-            service.haptics.tick(service, vol, max)
+        if (vol != audio.getStreamVolume(stream)) audio.setStreamVolume(stream, vol, 0)
+        p.level = f
+
+        // One tick when the fill reaches the top or bottom (no per-step ticks for touch).
+        val edge = edgeOf(f)
+        if (edge != 0 && edge != dragEdge) service.haptics.edgeTick(service)
+        dragEdge = edge
+
+        // Pulling past an end stretches the bar like rubber, anchored at the far end.
+        val over = raw - f
+        val stretch = 1f + RUBBER_MAX * (1f - 1f / (1f + abs(over) * 3f))
+        if (cfg.vertical) {
+            p.pivotY = if (over > 0) p.layoutParams.height.toFloat() else 0f
+            p.scaleY = stretch
+        } else {
+            p.pivotX = if (over > 0) 0f else p.layoutParams.width.toFloat()
+            p.scaleX = stretch
         }
-        levelAnim?.cancel()
-        pill?.level = f
     }
 
     fun destroy() {

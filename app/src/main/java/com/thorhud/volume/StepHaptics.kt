@@ -17,6 +17,7 @@ class StepHaptics(context: Context) {
         const val PULSE_MS = 10L
         const val MIN_AMP = 1      // of 255, at the lowest audible step (the weakest possible)
         const val MAX_AMP = 25     // of 255, at full volume (~10% strength)
+        const val EDGE_AMP = 20    // of 255, touch drag hitting top/bottom (~8%)
     }
 
     @Suppress("DEPRECATION")
@@ -31,6 +32,15 @@ class StepHaptics(context: Context) {
         val amp = if (v.hasAmplitudeControl())
             (MIN_AMP + frac.pow(1.3f) * (MAX_AMP - MIN_AMP)).roundToInt().coerceIn(1, 255)
         else VibrationEffect.DEFAULT_AMPLITUDE
+        v.vibrate(VibrationEffect.createOneShot(PULSE_MS, amp))
+    }
+
+    /** Touch drag reached the top or bottom of the bar: one small, fixed tick. */
+    fun edgeTick(context: Context) {
+        if (!HudPrefs.haptics(context)) return
+        val v = vibrator ?: return
+        if (!v.hasVibrator()) return
+        val amp = if (v.hasAmplitudeControl()) EDGE_AMP else VibrationEffect.DEFAULT_AMPLITUDE
         v.vibrate(VibrationEffect.createOneShot(PULSE_MS, amp))
     }
 }
