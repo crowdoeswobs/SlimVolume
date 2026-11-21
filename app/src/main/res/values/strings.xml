@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Slim Volume</string>
+    <string name="service_description">Replaces the system volume panel with a slim bar. Needs to read the volume buttons to do this; it doesn\'t read anything else.</string>
+</resources>
