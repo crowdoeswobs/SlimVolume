@@ -23,7 +23,7 @@ android {
         versionCode = 1
         versionName = "1.0"
         // Where the in-app update check looks for releases.
-        buildConfigField("String", "GITHUB_REPO", "\"crowdoeswobs/thor-slim-volume\"")
+        buildConfigField("String", "GITHUB_REPO", "\"crowdoeswobs/SlimVolume\"")
     }
 
     buildFeatures { buildConfig = true }

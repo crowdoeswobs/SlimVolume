@@ -10,4 +10,4 @@ A minimal, iOS-style volume bar for the AYN Thor, replacing the stock volume pan
 - Very subtle haptics per step, scaled with volume
 - Built-in auto-update
 
-Download the latest `thor-slim-volume-v*.apk` from [Releases](https://github.com/crowdoeswobs/thor-slim-volume/releases/latest) and install it.
+Download the latest `thor-slim-volume-v*.apk` from [Releases](https://github.com/crowdoeswobs/SlimVolume/releases/latest) and install it.
