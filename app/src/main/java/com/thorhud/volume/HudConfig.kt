@@ -45,7 +45,8 @@ object HudPrefs {
         0xFFBF5AF2.toInt(), // purple
         0xFF64D2FF.toInt(), // cyan
     )
-    val DEFAULT = HudConfig(vertical = true, cx = 0f, cy = 0.5f, lengthDp = 160f, thicknessDp = 14f)
+    // Right edge, vertically centred, top screen: where the Thor's stock volume panel sits.
+    val DEFAULT = HudConfig(vertical = true, cx = 1f, cy = 0.5f, lengthDp = 160f, thicknessDp = 14f)
 
     const val LENGTH_MIN = 60f
     const val LENGTH_MAX = 500f
