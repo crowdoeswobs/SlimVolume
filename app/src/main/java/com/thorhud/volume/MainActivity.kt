@@ -44,6 +44,10 @@ class MainActivity : Activity() {
             text = "Customize bar"
             setOnClickListener { startActivity(Intent(this@MainActivity, BarSettingsActivity::class.java)) }
         }
+        val sound = Button(this).apply {
+            text = "Sound"
+            setOnClickListener { startActivity(Intent(this@MainActivity, SoundSettingsActivity::class.java)) }
+        }
         val preview = Button(this).apply {
             text = "Preview bar"
             setOnClickListener { VolumeHudService.instance?.preview() }
@@ -79,6 +83,7 @@ class MainActivity : Activity() {
             addView(enabledSw, wide)
             addView(bootSw, wide)
             addView(customize, wide)
+            addView(sound, wide)
             addView(preview, wide)
             addView(updateBtn, wide)
             addView(version)

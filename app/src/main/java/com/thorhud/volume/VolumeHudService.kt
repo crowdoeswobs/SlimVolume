@@ -17,11 +17,43 @@ class VolumeHudService : AccessibilityService() {
     private lateinit var audio: AudioManager
     private var hud: VolumeHud? = null
     val haptics by lazy { StepHaptics(this) }
+    private var sounds: SoundPlayer? = null
+
+    private val soundPrefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key?.startsWith("sound_") == true) preloadSounds()
+    }
 
     override fun onServiceConnected() {
         audio = getSystemService(AudioManager::class.java)
         hud = VolumeHud(this, audio)
+        preloadSounds()
+        HudPrefs.prefs(this).registerOnSharedPreferenceChangeListener(soundPrefListener)
         instance = this
+    }
+
+    private fun preloadSounds() {
+        val follow = SoundBank.followVolume(this)
+        if (sounds?.followVolume != follow) {
+            sounds?.release()
+            sounds = SoundPlayer(this, follow)
+        }
+        if (!follow) {
+            // Fixed-loudness clicks use the accessibility stream; keep it at full so the slider decides.
+            val a = AudioManager.STREAM_ACCESSIBILITY
+            runCatching { audio.setStreamVolume(a, audio.getStreamMaxVolume(a), 0) }
+        }
+        val s = sounds ?: return
+        s.prune(SoundBank.all(this).map { it.id }.toSet())
+        if (!SoundBank.enabled(this)) return
+        s.preload(SoundBank.selected(this, up = true))
+        s.preload(SoundBank.selected(this, up = false))
+    }
+
+    /** Button click sound (buttons only; touch drags stay silent). */
+    private fun clickSound(up: Boolean) {
+        if (!SoundBank.enabled(this)) return
+        if (activeStream() != AudioManager.STREAM_MUSIC) return // not during calls
+        sounds?.play(SoundBank.selected(this, up), SoundBank.volume(this) / 100f)
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -39,6 +71,7 @@ class VolumeHudService : AccessibilityService() {
                     stopRepeat()
                     heldDirection = direction
                     val moved = step(direction)
+                    clickSound(direction == AudioManager.ADJUST_RAISE)
                     hud?.press()
                     // Already at 0% / 100%: one stretch is enough, don't start repeating.
                     if (moved) handler.postDelayed(repeater, REPEAT_DELAY_MS)
@@ -181,6 +214,9 @@ class VolumeHudService : AccessibilityService() {
 
     override fun onDestroy() {
         editor?.close()
+        HudPrefs.prefs(this).unregisterOnSharedPreferenceChangeListener(soundPrefListener)
+        sounds?.release()
+        sounds = null
         hud?.destroy()
         hud = null
         if (instance === this) instance = null

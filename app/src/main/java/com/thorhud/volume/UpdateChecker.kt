@@ -77,10 +77,7 @@ class UpdateChecker(private val activity: Activity) {
     }
 
     private fun offer(rel: Release) {
-        val msg = buildString {
-            append("Version ${rel.version} is available (you have ${BuildConfig.VERSION_NAME}).")
-            if (rel.notes.isNotEmpty()) append("\n\n").append(rel.notes.take(1200))
-        }
+        val msg = "Version ${rel.version} is available (you have ${BuildConfig.VERSION_NAME})."
         val b = AlertDialog.Builder(activity)
             .setTitle("Update available")
             .setMessage(msg)
