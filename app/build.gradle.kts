@@ -20,8 +20,8 @@ android {
         applicationId = "com.thorhud.volume"
         minSdk = 30
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
         // Where the in-app update check looks for releases.
         buildConfigField("String", "GITHUB_REPO", "\"crowdoeswobs/SlimVolume\"")
     }
